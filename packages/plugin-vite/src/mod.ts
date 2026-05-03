@@ -4,7 +4,7 @@ import {
   pathWithRoot,
   type ResolvedFreshViteConfig,
 } from "./utils.ts";
-import { deno } from "./plugins/deno.ts";
+import { deno, denoImportAttrs } from "./plugins/deno.ts";
 
 import prefresh from "@prefresh/vite";
 import { serverEntryPlugin } from "./plugins/server_entry.ts";
@@ -89,10 +89,12 @@ export function fresh(config?: FreshViteConfig): Plugin[] {
         isDev = env.command === "serve";
 
         return {
-          esbuild: {
-            jsx: "automatic",
-            jsxImportSource: "preact",
-            jsxDev: env.command === "serve",
+          oxc: {
+            jsx: {
+              runtime: "automatic",
+              importSource: "preact",
+              development: env.command === "serve",
+            },
           },
           resolve: {
             alias: {
@@ -167,7 +169,8 @@ export function fresh(config?: FreshViteConfig): Plugin[] {
 
                     // Ignore optional export errors
                     if (
-                      warning.code === "MISSING_EXPORT" &&
+                      (warning.code === "MISSING_EXPORT" ||
+                        warning.code === "IMPORT_IS_UNDEFINED") &&
                       warning.id?.startsWith("\0fresh-route::")
                     ) {
                       return;
@@ -247,7 +250,7 @@ export function fresh(config?: FreshViteConfig): Plugin[] {
   ];
 
   if (typeof process.versions.deno === "string") {
-    plugins.push(deno());
+    plugins.push(denoImportAttrs(), deno());
   }
 
   return plugins;

@@ -21,6 +21,78 @@ interface DenoState {
   type: RequestedModuleType;
 }
 
+// Regex to extract specifiers and their type from `from "X" with { type: "text"|"bytes" }`.
+const IMPORT_WITH_TYPE_RE =
+  /from\s+["']([^"']+)["']\s*with\s*\{\s*type\s*:\s*["'](text|bytes)["']\s*,?\s*\}/g;
+
+const DENO_BYTES_SUFFIX = "?deno-bytes";
+
+/**
+ * Bridges Deno-style `with { type: "text"|"bytes" }` import attributes
+ * to Vite-compatible mechanisms, since Rolldown does not pass import
+ * attributes to plugin hooks.
+ *
+ * - `type: "text"` → appends Vite's `?raw` suffix
+ * - `type: "bytes"` → appends `?deno-bytes` and serves via load hook
+ */
+export function denoImportAttrs(): Plugin {
+  // Cache: importer path → map of specifier → type
+  // Invalidated on file change via watchChange hook.
+  const attrImports = new Map<string, Map<string, string>>();
+
+  return {
+    name: "deno:import-attrs",
+    enforce: "pre",
+    watchChange(id) {
+      attrImports.delete(id);
+    },
+    async resolveId(id, importer) {
+      if (!importer || importer.startsWith("\0")) return;
+
+      if (!attrImports.has(importer)) {
+        try {
+          const source = await Deno.readTextFile(importer);
+          const specs = new Map<string, string>();
+          if (source.includes("with")) {
+            IMPORT_WITH_TYPE_RE.lastIndex = 0;
+            let m;
+            while ((m = IMPORT_WITH_TYPE_RE.exec(source)) !== null) {
+              specs.set(m[1], m[2]);
+            }
+          }
+          attrImports.set(importer, specs);
+        } catch {
+          attrImports.set(importer, new Map());
+        }
+      }
+
+      const specs = attrImports.get(importer)!;
+      const importType = specs.get(id);
+      if (importType) {
+        const resolved = await this.resolve(id, importer, {
+          skipSelf: true,
+        });
+        if (resolved) {
+          const suffix = importType === "text" ? "?raw" : DENO_BYTES_SUFFIX;
+          return { ...resolved, id: resolved.id + suffix };
+        }
+      }
+    },
+    load: {
+      filter: {
+        id: /\?deno-bytes$/,
+      },
+      async handler(id) {
+        const filePath = id.slice(0, -DENO_BYTES_SUFFIX.length);
+        const bytes = await Deno.readFile(filePath);
+        return {
+          code: `export default new Uint8Array([${bytes.join(",")}]);`,
+        };
+      },
+    },
+  };
+}
+
 export function deno(): Plugin {
   let ssrLoader: Loader;
   let browserLoader: Loader;
@@ -126,6 +198,7 @@ export function deno(): Plugin {
           denoImporterUrl = path.toFileUrl(denoImporter).href;
         }
 
+
         let resolved = await loader.resolve(
           id,
           denoImporterUrl,
@@ -143,7 +216,7 @@ export function deno(): Plugin {
           return null;
         }
 
-        const type = getDenoType(id, options.attributes.type ?? "default");
+        const type = getDenoType(id, options.attributes?.type ?? "default");
         if (
           type !== RequestedModuleType.Default ||
           /^(https?|jsr|npm):/.test(resolved)
