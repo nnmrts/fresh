@@ -150,12 +150,6 @@ export function devServer(freshConfig: ResolvedFreshViteConfig): Plugin[] {
               const styles = collected.join("\n");
               html = html.replace("</head>", styles + "</head>");
 
-              // Run through Vite's HTML pipeline to inject the
-              // HMR client and other dev-mode scripts.
-              html = await server.transformIndexHtml(
-                url.pathname,
-                html,
-              );
 
               const newRes = new Response(html, {
                 status: res.status,
@@ -194,7 +188,7 @@ export function devServer(freshConfig: ResolvedFreshViteConfig): Plugin[] {
         if (ssrMod !== undefined) {
           // SSR-only module. Might still be a route.
           // TODO: Implement proper ssr hmr
-          options.server.hot.send({ type: "full-reload" });
+          options.server.hot.send("fresh:reload");
         }
       },
     },

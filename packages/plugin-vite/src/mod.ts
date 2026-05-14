@@ -98,23 +98,6 @@ export function fresh(config?: FreshViteConfig): Plugin[] {
               development: env.command === "serve",
             },
           },
-          server: {
-            watch: {
-              // Ignore temp files, editor swap files, and Vite timestamp
-              // files. On Linux, these short-lived files can trigger a
-              // watchFs race condition in Deno where the watcher tries to
-              // open a file that has already been deleted, crashing the
-              // dev server with ENOENT.
-              ignored: [
-                "**/*.tmp.*",
-                "**/*.timestamp-*",
-                "**/*~",
-                "**/.#*",
-                "**/*.swp",
-                "**/*.swo",
-              ],
-            },
-          },
           resolve: {
             alias: {
               "react-dom/test-utils": "preact/test-utils",
@@ -188,8 +171,7 @@ export function fresh(config?: FreshViteConfig): Plugin[] {
 
                     // Ignore optional export errors
                     if (
-                      (warning.code === "MISSING_EXPORT" ||
-                        warning.code === "IMPORT_IS_UNDEFINED") &&
+                      warning.code === "MISSING_EXPORT" &&
                       warning.id?.startsWith("\0fresh-route::")
                     ) {
                       return;

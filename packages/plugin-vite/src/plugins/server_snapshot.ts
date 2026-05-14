@@ -119,7 +119,7 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
           }
 
           // Finally, notify the client
-          viteServer.hot.send({ type: "full-reload" });
+          viteServer.ws.send("fresh:reload");
         });
       },
       resolveId: {
