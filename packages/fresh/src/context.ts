@@ -59,6 +59,28 @@ export interface WebSocketUpgradeOptions {
 }
 
 /**
+ * Side channel used by `@fresh/plugin-vite` (and any other adapter sitting on
+ * top of `node:http`) to hand a raw socket + buffered head to `ctx.upgrade()`.
+ * `Deno.upgradeWebSocket()` normally pulls these off the request handled by
+ * `Deno.serve`, but a request synthesized from `node:http` carries neither, so
+ * the adapter stashes them here and `ctx.upgrade()` forwards them to Deno.
+ *
+ * Stored on `globalThis` so a single WeakMap is shared even when this module
+ * is evaluated more than once (e.g. once by Deno for the Vite plugin and once
+ * by Vite's SSR runner for the user's server code).
+ */
+const UPGRADE_SOURCE_KEY: unique symbol = Symbol.for(
+  "fresh.upgradeSourceMap",
+) as typeof UPGRADE_SOURCE_KEY;
+// deno-lint-ignore no-explicit-any
+type UpgradeSource = { socket: any; head: any };
+// deno-lint-ignore no-explicit-any
+const globalAny = globalThis as any;
+export const upgradeSourceMap: WeakMap<Request, UpgradeSource> =
+  globalAny[UPGRADE_SOURCE_KEY] ??
+    (globalAny[UPGRADE_SOURCE_KEY] = new WeakMap<Request, UpgradeSource>());
+
+/**
  * Duck-type check: treats the argument as managed-mode handlers when at least
  * one of the handler keys (`open`, `message`, `close`, `error`) is a
  * function.  This works because {@link WebSocketUpgradeOptions} only has
@@ -98,8 +120,11 @@ export type ServerIslandRegistry = Map<ComponentType, Island>;
 export const internals: unique symbol = Symbol("fresh_internal");
 
 export interface UiTree<Data, State> {
-  app: AnyComponent<PageProps<Data, State>> | null;
-  layouts: ComponentDef<Data, State>[];
+  app: {
+    component: AnyComponent<PageProps<Data, State>>;
+    css: string[] | null;
+  } | null;
+  layouts: (ComponentDef<Data, State> & { css: string[] | null })[];
 }
 
 /**
@@ -109,7 +134,10 @@ export type FreshContext<State = unknown> = Context<State>;
 
 export let getBuildCache: <T>(ctx: Context<T>) => BuildCache<T>;
 export let getInternals: <T>(ctx: Context<T>) => UiTree<unknown, T>;
-export let setAdditionalStyles: <T>(ctx: Context<T>, css: string[]) => void;
+export let setAdditionalStyles: <T>(
+  ctx: Context<T>,
+  css: string[] | null | undefined,
+) => void;
 
 /**
  * The context passed to every middleware. It is unique for every request.
@@ -182,8 +210,23 @@ export class Context<State> {
     // deno-lint-ignore no-explicit-any
     getInternals = <T>(ctx: Context<T>) => ctx.#internal as any;
     getBuildCache = <T>(ctx: Context<T>) => ctx.#buildCache;
-    setAdditionalStyles = <T>(ctx: Context<T>, css: string[]) =>
-      ctx.#additionalStyles = css;
+    setAdditionalStyles = <T>(
+      ctx: Context<T>,
+      css: string[] | null | undefined,
+    ) => {
+      if (css == null) return;
+
+      if (ctx.#additionalStyles === null) {
+        ctx.#additionalStyles = css.slice();
+        return;
+      }
+
+      for (const href of css) {
+        if (!ctx.#additionalStyles.includes(href)) {
+          ctx.#additionalStyles.push(href);
+        }
+      }
+    };
   }
 
   constructor(
@@ -283,6 +326,7 @@ export class Context<State> {
       props.Component = () => child;
 
       const def = defs[i];
+      setAdditionalStyles(this, def.css);
 
       const result = await renderRouteComponent(this, def, () => child);
       if (result instanceof Response) {
@@ -298,16 +342,20 @@ export class Context<State> {
 
     let hasApp = true;
 
-    if (isAsyncAnyComponent(appDef)) {
+    if (appDef !== null) {
+      setAdditionalStyles(this, appDef.css);
+    }
+
+    if (appDef !== null && isAsyncAnyComponent(appDef.component)) {
       props.Component = () => appChild;
-      const result = await renderAsyncAnyComponent(appDef, props);
+      const result = await renderAsyncAnyComponent(appDef.component, props);
       if (result instanceof Response) {
         return result;
       }
 
       appVNode = result;
     } else if (appDef !== null) {
-      appVNode = h(appDef, {
+      appVNode = h(appDef.component, {
         Component: () => appChild,
         config: this.config,
         data: null,
@@ -595,7 +643,16 @@ export class Context<State> {
       throw new HttpError(400, "Expected a WebSocket upgrade request");
     }
 
-    const { socket, response } = Deno.upgradeWebSocket(this.req, options);
+    const source = upgradeSourceMap.get(this.req);
+    if (source !== undefined) upgradeSourceMap.delete(this.req);
+    const upgradeOptions = source
+      ? { ...options, socket: source.socket, head: source.head }
+      : options;
+    const { socket, response } = Deno.upgradeWebSocket(
+      this.req,
+      // deno-lint-ignore no-explicit-any
+      upgradeOptions as any,
+    );
 
     if (handlers === undefined) {
       return { socket, response };

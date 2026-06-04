@@ -1,4 +1,5 @@
 import { expect } from "@std/expect";
+import { walk } from "@std/fs/walk";
 import {
   waitFor,
   waitForText,
@@ -13,8 +14,13 @@ import {
   usingEnv,
 } from "./test_utils.ts";
 import * as path from "@std/path";
+import { FRESH_CSS_PLACEHOLDER } from "../src/plugins/server_snapshot.ts";
 
 const viteResult = await buildVite(DEMO_DIR);
+const NON_ISLAND_CSS_MODULES_FIXTURE = path.join(
+  FIXTURE_DIR,
+  "non_island_css_modules",
+);
 
 integrationTest("vite build - launches", async () => {
   await launchProd(
@@ -388,6 +394,81 @@ integrationTest(
   },
 );
 
+integrationTest(
+  "vite build - css modules in _app/_layout/_error non-island component are injected",
+  async () => {
+    await using res = await buildVite(NON_ISLAND_CSS_MODULES_FIXTURE);
+
+    await launchProd(
+      { cwd: res.tmp },
+      async (address) => {
+        await withBrowser(async (page) => {
+          {
+            // check _app/_layout
+            await page.goto(`${address}`, {
+              waitUntil: "networkidle2",
+            });
+
+            const _app = await page
+              .locator<HTMLHeadingElement>(".green > h1")
+              .evaluate((el) => window.getComputedStyle(el).color);
+            expect(_app).toEqual("rgb(0, 128, 0)");
+
+            const _layout = await page
+              .locator<HTMLHeadingElement>(".red > h1")
+              .evaluate((el) => window.getComputedStyle(el).color);
+            expect(_layout).toEqual("rgb(255, 0, 0)");
+          }
+
+          {
+            // check _app/_layout/_error
+            await page.goto(`${address}/boom`, {
+              waitUntil: "networkidle2",
+            });
+
+            const _app = await page
+              .locator<HTMLHeadingElement>(".green > h1")
+              .evaluate((el) => window.getComputedStyle(el).color);
+            expect(_app).toEqual("rgb(0, 128, 0)");
+
+            const _layout = await page
+              .locator<HTMLHeadingElement>(".red > h1")
+              .evaluate((el) => window.getComputedStyle(el).color);
+            expect(_layout).toEqual("rgb(255, 0, 0)");
+
+            const _error = await page
+              .locator<HTMLHeadingElement>(".blue > h1")
+              .evaluate((el) => window.getComputedStyle(el).color);
+            expect(_error).toEqual("rgb(0, 0, 255)");
+          }
+
+          {
+            // check _app/_layout/_404
+            await page.goto(`${address}/non_existent`, {
+              waitUntil: "networkidle2",
+            });
+
+            const _app = await page
+              .locator<HTMLHeadingElement>(".green > h1")
+              .evaluate((el) => window.getComputedStyle(el).color);
+            expect(_app).toEqual("rgb(0, 128, 0)");
+
+            const _layout = await page
+              .locator<HTMLHeadingElement>(".red > h1")
+              .evaluate((el) => window.getComputedStyle(el).color);
+            expect(_layout).toEqual("rgb(255, 0, 0)");
+
+            const _404 = await page
+              .locator<HTMLHeadingElement>(".orange > h1")
+              .evaluate((el) => window.getComputedStyle(el).color);
+            expect(_404).toEqual("rgb(255, 165, 0)");
+          }
+        });
+      },
+    );
+  },
+);
+
 integrationTest("vite build - route css import", async () => {
   await launchProd(
     { cwd: viteResult.tmp },
@@ -409,6 +490,45 @@ integrationTest("vite build - route css import", async () => {
     },
   );
 });
+
+integrationTest(
+  "vite build - __FRESH_CSS_PLACEHOLDER__ has been replaced in all server chunks",
+  async () => {
+    await using res = await buildVite(NON_ISLAND_CSS_MODULES_FIXTURE, {
+      base: "/my-app/",
+    });
+
+    const serverDir = path.join(res.tmp, "_fresh", "server");
+    const inspected: string[] = [];
+    for await (
+      const entry of walk(serverDir, {
+        exts: [".mjs"],
+        includeDirs: false,
+      })
+    ) {
+      const content = await Deno.readTextFile(entry.path);
+      inspected.push(path.relative(serverDir, entry.path));
+      expect(content).not.toContain(FRESH_CSS_PLACEHOLDER);
+    }
+
+    expect(inspected.length).toBeGreaterThan(0);
+  },
+);
+
+integrationTest(
+  "vite build - shared server chunk keeps utility css references after replacement",
+  async () => {
+    await using res = await buildVite(NON_ISLAND_CSS_MODULES_FIXTURE);
+
+    const serverEntryJs = await Deno.readTextFile(
+      path.join(res.tmp, "_fresh", "server", "server-entry.mjs"),
+    );
+
+    const cssRefs = serverEntryJs.match(/"\/assets\/server-entry-.*?\.css"/g) ??
+      [];
+    expect(cssRefs.length).toBeGreaterThanOrEqual(4);
+  },
+);
 
 integrationTest("vite build - remote island", async () => {
   const fixture = path.join(FIXTURE_DIR, "remote_island");
