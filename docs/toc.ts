@@ -1,4 +1,7 @@
-import FRESH_VERSIONS from "../versions.json" with { type: "json" };
+import FRESH_VERSIONS_1x from "../versions.json" with { type: "json" };
+import LATEST_VERSION_2 from "../packages/fresh/deno.json" with {
+  type: "json",
+};
 
 type RawTableOfContents = Record<
   string,
@@ -15,89 +18,111 @@ interface RawTableOfContentsEntry {
 }
 
 const toc: RawTableOfContents = {
-  canary: {
-    label: "canary",
+  latest: {
+    label: LATEST_VERSION_2.version,
     content: {
       introduction: {
         title: "Introduction",
-        link: "canary",
+        link: "latest",
       },
       "getting-started": {
         title: "Getting Started",
-        link: "canary",
+        link: "latest",
       },
       concepts: {
         title: "Concepts",
-        link: "canary",
+        link: "latest",
         pages: [
-          ["app", "App", "link:canary"],
-          ["middleware", "Middlewares", "link:canary"],
-          ["context", "Context", "link:canary"],
-
-          ["routing", "Routing", "link:canary"],
-
-          ["islands", "Islands", "link:canary"],
-          ["static-files", "Static files", "link:canary"],
-
-          ["builder", "Builder", "link:canary"],
-          ["file-routing", "File routing", "link:canary"],
+          ["architecture", "Architecture", "link:latest"],
+          ["islands", "Islands", "link:latest"],
+          ["app", "App", "link:latest"],
+          ["routing", "Routing", "link:latest"],
+          ["data-fetching", "Data Fetching", "link:latest"],
+          ["middleware", "Middlewares", "link:latest"],
+          ["context", "Context", "link:latest"],
+          ["signals", "Signals", "link:latest"],
+          ["layouts", "Layouts", "link:latest"],
+          ["static-files", "Static files", "link:latest"],
+          ["file-routing", "File routing", "link:latest"],
         ],
       },
       advanced: {
         title: "Advanced",
-        link: "canary",
+        link: "latest",
         pages: [
-          ["app-wrapper", "App wrapper", "link:canary"],
-          ["layouts", "Layouts", "link:canary"],
-          ["error-handling", "Error handling", "link:canary"],
-          ["partials", "Partials", "link:canary"],
-          ["forms", "Forms", "link:canary"],
+          ["app-wrapper", "App wrapper", "link:latest"],
+          ["layouts", "Layouts", "link:latest"],
+          ["error-handling", "Error handling", "link:latest"],
+          ["partials", "Partials", "link:latest"],
+          ["view-transitions", "View Transitions", "link:latest"],
+          ["forms", "Forms", "link:latest"],
+          ["define", "Define Helpers", "link:latest"],
+          ["serialization", "Serialization", "link:latest"],
+          ["environment-variables", "Environment Variables", "link:latest"],
+          ["head", "<head> element", "link:latest"],
+          ["vite", "Vite Plugin Options", "link:latest"],
+          ["websockets", "WebSockets", "link:latest"],
+          ["opentelemetry", "OpenTelemetry", "link:latest"],
+          ["api-reference", "API Reference", "link:latest"],
+          ["troubleshooting", "Troubleshooting", "link:latest"],
+          ["builder", "Builder (Legacy)", "link:latest"],
         ],
       },
       deployment: {
         title: "Deployment",
-        link: "canary",
+        link: "latest",
         pages: [
-          ["production", "Production builds", "link:canary"],
-          ["deno-deploy", "Deno Deploy", "link:canary"],
-          ["docker", "Docker", "link:canary"],
+          ["deno-deploy", "Deno Deploy", "link:latest"],
+          ["deno-compile", "deno compile", "link:latest"],
+          ["docker", "Docker", "link:latest"],
+          ["cloudflare-workers", "Cloudflare Workers", "link:latest"],
         ],
       },
       testing: {
         title: "Testing",
-        link: "canary",
+        link: "latest",
       },
       plugins: {
         title: "Plugins",
-        link: "canary",
+        link: "latest",
         pages: [
-          ["cors", "cors", "link:canary"],
-          ["csrf", "csrf", "link:canary"],
-          ["trailing-slashes", "trailingSlashes", "link:canary"],
-          ["tailwindcss", "tailwindcss", "link:canary"],
+          ["cors", "cors", "link:latest"],
+          ["csrf", "csrf", "link:latest"],
+          ["csp", "csp", "link:latest"],
+          ["ip-filter", "ipFilter", "link:latest"],
+          ["trailing-slashes", "trailingSlashes", "link:latest"],
         ],
       },
       examples: {
         title: "Examples",
         link: "latest",
         pages: [
-          ["migration-guide", "Migration Guide", "link:canary"],
-          ["modifying-the-head", "Modifying the <head>", "link:latest"],
-          ["creating-a-crud-api", "Creating a CRUD API", "link:latest"],
-          ["rendering-markdown", "Rendering markdown", "link:latest"],
-          ["rendering-raw-html", "Rendering raw HTML", "link:canary"],
+          ["api-routes", "API Routes", "link:latest"],
+          ["daisyui", "daisyUI", "link:latest"],
+          ["markdown", "Rendering Markdown", "link:latest"],
+          ["rendering-raw-html", "Rendering raw HTML", "link:latest"],
           [
             "sharing-state-between-islands",
             "Sharing state between islands",
             "link:latest",
           ],
-          ["active-links", "Styling active links", "link:latest"],
+          ["active-links", "Active links", "link:latest"],
+          ["session-management", "Session management", "link:latest"],
+          ["common-patterns", "Common Patterns", "link:latest"],
         ],
+      },
+      "migration-guide": {
+        title: "Migration Guide",
+        link: "latest",
+      },
+      contributing: {
+        title: "Contributing",
+        link: "latest",
       },
     },
   },
-  latest: {
-    label: FRESH_VERSIONS[0],
+  "1.x": {
+    label: FRESH_VERSIONS_1x[0],
     content: {
       introduction: {
         title: "Introduction",

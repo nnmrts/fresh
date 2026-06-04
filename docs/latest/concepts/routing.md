@@ -1,150 +1,102 @@
 ---
 description: |
-  File based routing is the simplest way to do routing in Fresh apps. Additionally custom patterns can be configured per route.
+  How routing works in Fresh, including route patterns, matching priority, method-specific handlers, and URLPattern support.
 ---
 
-Routing is the mechanism that determines what route a given incoming request is
-handled by. Fresh routes requests based on their URL path. By default routes
-specify which paths they are invoked for using the name of the file. Routes can
-also define a custom [URL pattern][urlpattern] to match against for more
-advanced use cases.
+Routing defines which middlewares and routes should respond to a particular
+request.
 
-The file based routing in Fresh is very similar to the file based routing seen
-in other frameworks, namely Next.js. File names are used to determine which
-route a given request should be handled by. The pattern is determined based on
-the path of the file on disk, relative to the `routes/` directory.
+```ts main.ts
+import { App } from "fresh";
 
-File names are mapped to route patterns as follows:
-
-- File extensions are ignored.
-- Literals in the file path are treated as string literals to match.
-- Files named `<path>/index.<ext>` behave identically to a file named
-  `<path>.<ext>`.
-- Path segments can be made dynamic by surrounding an identifier with `[` and
-  `]`.
-- Paths where the last path segment follows the structure `[...<ident>]` are
-  treated as having a wildcard suffix.
-
-Here is a table of file names, which route patterns they map to, and which paths
-they might match:
-
-| File name                   | Route pattern          | Matching paths                          |
-| --------------------------- | ---------------------- | --------------------------------------- |
-| `index.ts`                  | `/`                    | `/`                                     |
-| `about.ts`                  | `/about`               | `/about`                                |
-| `blog/index.ts`             | `/blog`                | `/blog`                                 |
-| `blog/[slug].ts`            | `/blog/:slug`          | `/blog/foo`, `/blog/bar`                |
-| `blog/[slug]/comments.ts`   | `/blog/:slug/comments` | `/blog/foo/comments`                    |
-| `old/[...path].ts`          | `/old/:path*`          | `/old/foo`, `/old/bar/baz`              |
-| `docs/[[version]]/index.ts` | `/docs{/:version}?`    | `/docs`, `/docs/latest`, `/docs/canary` |
-
-Advanced use-cases can require that a more complex pattern be used for matching.
-A custom [URL pattern][urlpattern] can be specified in the route configuration.
-This pattern will be used instead of the file path based pattern:
-
-```ts routes/x.ts
-import { RouteConfig } from "$fresh/server.ts";
-
-export const config: RouteConfig = {
-  routeOverride: "/x/:module@:version/:path*",
-};
-
-// ...
+const app = new App()
+  .get("/", () => new Response("hello")) // Responds to: GET /
+  .get("/other", () => new Response("other")) // Responds to: GET /other
+  .post("/upload", () => new Response("upload")) // Responds to: POST /upload
+  .get("/books/:id", (ctx) => {
+    // Responds to: GET /books/my-book, /books/cool-book, etc
+    const id = ctx.params.id;
+    return new Response(`Book id: ${id}`);
+  })
+  .get("/blog/:post/comments", (ctx) => {
+    // Responds to: GET /blog/my-post/comments, /blog/hello/comments, etc
+    const post = ctx.params.post;
+    return new Response(`Blog post comments for post: ${post}`);
+  })
+  .get("/foo/*", (ctx) => {
+    // Responds to: GET /foo/bar, /foo/bar/baz, etc
+    return new Response("foo");
+  });
 ```
 
-## Route Groups
+Fresh supports the full
+[`URLPattern`](https://developer.mozilla.org/en-US/docs/Web/API/URL_Pattern_API)
+syntax for setting pathnames.
 
-When working with [layouts](/docs/concepts/layouts) or
-[middlewares](/docs/concepts/middleware), you'll sometimes come across a
-situation where you want your routes to inherit from a layout other than what's
-suggested by the URL segment.
+## Route matching priority
 
-Let's illustrate that with an example:
+Routes are matched in the following order:
 
-```txt
-/about -> layout A
-/career -> layout A
-/archive -> layout B
-/contact -> layout B
+1. **Static routes** (exact path match like `/about`) are checked first and
+   always take precedence.
+2. **Dynamic routes** (patterns like `/posts/:id`) are checked in the order they
+   were registered. The first matching route wins.
+
+This means the registration order matters for dynamic routes:
+
+```ts main.ts
+const app = new App()
+  // This is checked first since it's registered first
+  .get("/posts/featured", () => new Response("Featured posts"))
+  // This is checked second - won't match "/posts/featured" because it's
+  // already handled above
+  .get("/posts/:id", (ctx) => new Response(`Post: ${ctx.params.id}`));
 ```
 
-Without any way to group routes this is a problem because every route segment
-can only have one `_layout` file.
+## HTTP method handlers
 
-```txt Project structure
-└── routes
-    ├── _layout.tsx  # applies to all routes here :(
-    ├── about.tsx
-    ├── career.tsx
-    ├── archive.tsx
-    └── contact.tsx
+Fresh provides method-specific route registration via `.get()`, `.post()`,
+`.put()`, `.delete()`, `.head()`, `.patch()`, and `.options()`. Each method only
+responds to its matching HTTP verb.
+
+Use `.all()` to respond to any HTTP method:
+
+```ts main.ts
+app.all("/api/health", () => new Response("ok"));
 ```
 
-We can solve this problem with route groups. A route group is a folder which has
-a name that is wrapped in parentheses. For example `(info)` would be considered
-a route group and so would `(marketing)`. This enables us to group related
-routes in a folder and use a different `_layout` file for each group.
+If a route is registered for `GET` but receives a `POST` request, Fresh returns
+a `405 Method Not Allowed` response. `HEAD` requests automatically fall back to
+the `GET` handler if no dedicated `HEAD` handler is defined.
 
-```txt Project structure
-└── routes
-    ├── (marketing)
-    │   ├── _layout.tsx  # only applies to about.tsx and career.tsx
-    │   ├── about.tsx
-    │   └── career.tsx
-    └── (info)
-        ├── _layout.tsx  # only applies to archive.tsx and contact.tsx
-        ├── archive.tsx
-        └── contact.tsx
+## File-based route handlers
+
+In file-based routes, export a `handlers` object with method-specific functions:
+
+```ts routes/api/users.ts
+import { define } from "@/utils.ts";
+
+export const handlers = define.handlers({
+  GET(ctx) {
+    return new Response(JSON.stringify({ users: [] }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  },
+  POST(ctx) {
+    return new Response("Created", { status: 201 });
+  },
+});
 ```
 
-> [warn]: Be careful about routes in different groups which match to the same
-> URL. Such scenarios will lead to ambiguity as to which route file should be
-> picked.
->
-> ```txt Project structure
-> └── routes
->     ├── (group-1)
->     │   └── about.tsx  # Bad: Maps to same `/about` url
->     └── (group-2)
->         └── about.tsx  # Bad: Maps to same `/about` url
-> ```
+To handle all methods, export a single function instead:
 
-[urlpattern]: https://developer.mozilla.org/en-US/docs/Web/API/URL_Pattern_API
+```ts routes/api/health.ts
+import { define } from "@/utils.ts";
 
-## Co-location
-
-If you want to store components and islands closer to their routes, you may want
-to use co-location.
-
-When the name of a route group folder starts with an underscore, like
-`(_components)`, Fresh will ignore that folder and it’s effectively treated as
-private. This means you can use these private route folders to store components
-related to a particular route.
-
-Following the above example, say you have some components you only want to use
-in your marketing pages, you could create a route group folder `(_components)`
-to house these.
-
-The one special name is `(_islands)` which tells Fresh to treat all files in
-that folder as an island.
-
-```txt Project structure
-└── routes
-    ├── (marketing)
-    │   ├── _layout.tsx
-    │   ├── about.tsx
-    │   ├── career.tsx
-    │   ├── (_components)
-    │   │   └── newsletter-cta.tsx
-    │   └── (_islands)
-    │       └── interactive-stats.tsx # Fresh treats this as an island
-    └── shop
-        ├── (_components)
-        │   └── product-card.tsx
-        └── (_islands)
-            └── cart.tsx # Fresh treats this as an island
+export const handlers = define.handlers((ctx) => {
+  return new Response(`Received a ${ctx.req.method} request`);
+});
 ```
 
-Combined together, this gives you the ability to organise your code on a feature
-basis and put all related components, islands or anything else into a shared
-folder.
+See [File routing](/docs/concepts/file-routing) for more on the file-based
+routing convention.

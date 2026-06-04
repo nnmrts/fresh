@@ -1,68 +1,72 @@
 ---
 description: |
-  Data fetching in Fresh happens inside of route handler functions. These can pass route data to the page via page props.
+  Load data on the server in handlers and pass it to page components with full type safety.
 ---
 
-Server side data fetching in Fresh is accomplished through asynchronous handler
-functions. These handler functions can call a `ctx.render()` function with the
-data to be rendered as an argument. This data can then be retrieved by the page
-component through the `data` property on the `props`.
+Data fetching in Fresh happens on the server. Handlers load data and pass it to
+page components via the `page()` helper. This keeps API keys, database
+connections, and sensitive logic out of the browser.
 
-Here is an example:
+## Handlers and page components
+
+A handler fetches data and returns it with `page()`. The page component receives
+it in `props.data`:
 
 ```tsx routes/projects/[id].tsx
-interface Project {
-  name: string;
-  stars: number;
+import { HttpError, page } from "fresh";
+import { define } from "@/utils.ts";
+
+interface Data {
+  project: { name: string; stars: number };
 }
 
-export const handler: Handlers<Project> = {
-  async GET(_req, ctx) {
-    const project = await db.projects.findOne({ id: ctx.params.id });
+export const handler = define.handlers({
+  async GET(ctx) {
+    const project = await db.projects.findOne(ctx.params.id);
     if (!project) {
-      return ctx.renderNotFound({
-        message: "Project does not exist",
-      });
+      throw new HttpError(404);
     }
-    return ctx.render(project);
+    return page({ project });
   },
-};
+});
 
-export default function ProjectPage(props: PageProps<Project>) {
+export default define.page<typeof handler>(({ data }) => {
   return (
     <div>
-      <h1>{props.data.name}</h1>
-      <p>{props.data.stars} stars</p>
+      <h1>{data.project.name}</h1>
+      <p>{data.project.stars} stars</p>
     </div>
   );
-}
+});
 ```
 
-The type parameter on the `PageProps`, `Handlers`, `Handler`, and `FreshContext`
-can be used to enforce a TypeScript type to use for the render data. Fresh
-enforces during type checking that the types in all of these fields are
-compatible within a single page.
+The `define.page<typeof handler>` generic links the handler's return type to the
+component's props, giving you full autocompletion on `data`.
 
-## Asynchronous routes
+## Setting response headers and status
 
-As a shortcut for combining a `GET` handler with a route, you can define your
-route as `async`. An `async` route (a route that returns a promise) will be
-called with the `Request` and a `RouteContext` (similar to a `HandlerContext`).
-Here is the above example rewritten using this shortcut:
+Pass options to `page()` to customize the HTTP response:
+
+```ts
+return page(data, {
+  status: 201,
+  headers: { "Cache-Control": "public, max-age=3600" },
+});
+```
+
+## Async page components
+
+For simpler cases, you can fetch data directly in an async component without a
+separate handler:
 
 ```tsx routes/projects/[id].tsx
-interface Project {
-  name: string;
-  stars: number;
-}
+import { HttpError } from "fresh";
+import { define } from "@/utils.ts";
 
-export default async function ProjectPage(_req, ctx: FreshContext) {
-  const project: Project | null = await db.projects.findOne({
-    id: ctx.params.id,
-  });
-
+export default define.page(async (ctx) => {
+  const project = await db.projects.findOne(ctx.params.id);
   if (!project) {
-    return <h1>Project not found</h1>;
+    throw new HttpError(404);
   }
 
   return (
@@ -71,5 +75,59 @@ export default async function ProjectPage(_req, ctx: FreshContext) {
       <p>{project.stars} stars</p>
     </div>
   );
-}
+});
 ```
+
+This is convenient for pages where you don't need the type-safe data bridge
+between handler and component.
+
+## Passing state from middleware
+
+[Middleware](/docs/concepts/middleware) can set values on `ctx.state` that are
+available to all downstream handlers and components:
+
+```ts routes/_middleware.ts
+import { define } from "@/utils.ts";
+
+export default define.middleware(async (ctx) => {
+  const session = await getSession(ctx.req);
+  ctx.state.user = session?.user ?? null;
+  return ctx.next();
+});
+```
+
+```tsx routes/dashboard.tsx
+import { page } from "fresh";
+import { define } from "@/utils.ts";
+
+export const handler = define.handlers({
+  GET(ctx) {
+    if (!ctx.state.user) {
+      return ctx.redirect("/login");
+    }
+    return page();
+  },
+});
+
+export default define.page((ctx) => {
+  return <h1>Welcome, {ctx.state.user.name}</h1>;
+});
+```
+
+## What's available in page props
+
+Page components receive these properties:
+
+| Property    | Type                     | Description                               |
+| ----------- | ------------------------ | ----------------------------------------- |
+| `data`      | `Data`                   | Data returned by the handler via `page()` |
+| `url`       | `URL`                    | The request URL                           |
+| `params`    | `Record<string, string>` | Route parameters (e.g. `:id`)             |
+| `req`       | `Request`                | The original HTTP request                 |
+| `state`     | `State`                  | Shared state set by middleware            |
+| `config`    | `ResolvedFreshConfig`    | The resolved Fresh configuration          |
+| `route`     | `string \| null`         | The matched route pattern                 |
+| `info`      | `Deno.ServeHandlerInfo`  | Server connection info                    |
+| `error`     | `unknown \| null`        | Caught error (on error pages)             |
+| `isPartial` | `boolean`                | Whether this is a partial request         |
+| `Component` | `FunctionComponent`      | Child component (in layouts)              |
