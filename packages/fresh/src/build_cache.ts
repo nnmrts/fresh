@@ -17,6 +17,12 @@ export interface FileSnapshot {
 export interface BuildSnapshot<State> {
   version: string;
   clientEntry: string;
+  /**
+   * When defined, forces the boot script to be emitted in dev so HMR
+   * listeners attach even on island-free pages. The value itself is
+   * currently unused — only its presence matters. Undefined outside of dev.
+   */
+  hmrClientEntry?: string;
   fsRoutes: FsRouteFile<State>[];
   staticFiles: Map<string, FileSnapshot>;
   islands: ServerIslandRegistry;
@@ -51,6 +57,7 @@ export class ProdBuildCache<State> implements BuildCache<State> {
   #snapshot: BuildSnapshot<State>;
   islandRegistry: ServerIslandRegistry;
   clientEntry: string;
+  hmrClientEntry: string | undefined;
   features = { errorOverlay: false };
 
   constructor(public root: string, snapshot: BuildSnapshot<State>) {
@@ -58,6 +65,7 @@ export class ProdBuildCache<State> implements BuildCache<State> {
     this.#snapshot = snapshot;
     this.islandRegistry = snapshot.islands;
     this.clientEntry = snapshot.clientEntry;
+    this.hmrClientEntry = snapshot.hmrClientEntry;
   }
 
   getEntryAssets(): string[] {

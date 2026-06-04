@@ -13,6 +13,7 @@ import {
   pathToSpec,
   type PendingStaticFile,
   specToName,
+  toPosix,
   UniqueNamer,
 } from "fresh/internal-dev";
 import {
@@ -22,6 +23,19 @@ import {
 } from "../utils.ts";
 import * as path from "@std/path";
 import { getBuildId } from "./build_id.ts";
+
+const CSS_LANG_REG = /\.(css|less|sass|scss)(\?.*)?$/;
+export const FRESH_CSS_PLACEHOLDER = `["__FRESH_CSS_PLACEHOLDER__"]`;
+
+export function replaceFreshCssPlaceholders(
+  content: string,
+  css: string[] | undefined,
+): string {
+  return content.replaceAll(
+    FRESH_CSS_PLACEHOLDER,
+    css ? JSON.stringify(css.map((href) => `/${href}`)) : "null",
+  );
+}
 
 export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
   const modName = "fresh:server-snapshot";
@@ -158,17 +172,26 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
             const route = result.routes[i];
             const name = routeNamer.getUniqueName(route.id);
 
-            routeFileToName.set(route.filePath, name);
+            routeFileToName.set(toPosix(route.filePath), name);
             routes.set(name, route);
           }
 
           const staticFiles: PendingStaticFile[] = [];
           let islandMods: IslandModChunk[] = [];
           let clientEntry = "/@id/fresh:client-entry";
+          let hmrClientEntry: string | undefined;
           let buildId = "";
           const entryAssets: string[] = [];
 
           if (isDev && server !== undefined) {
+            // Set hmrClientEntry so the SSR runtime always emits a boot script
+            // in dev, even when a page has zero islands. Without this, edits
+            // to island-free routes never trigger a browser reload because the
+            // `fresh:reload` WebSocket listener is never attached. The value
+            // is used as a marker only — its presence is what matters, not
+            // what it points to.
+            hmrClientEntry = clientEntry;
+
             for (const id of islands.keys()) {
               const mod = server.environments.client.moduleGraph.getModuleById(
                 id,
@@ -380,6 +403,7 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
             staticFiles,
             buildId,
             clientEntry,
+            hmrClientEntry,
             entryAssets,
             fsRoutesFiles: result.routes,
             islands: islandMods,
@@ -401,7 +425,7 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
       },
       transform: {
         filter: {
-          id: /\.(css|less|sass|scss)(\?.*)?$/,
+          id: CSS_LANG_REG,
         },
         handler(_code, id) {
           if (server) {
@@ -416,7 +440,7 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
             let item: EnvironmentModuleNode | undefined;
             while ((item = queue.pop()) !== undefined) {
               if (item.file !== null) {
-                const normalized = path.normalize(item.file);
+                const normalized = toPosix(path.normalize(item.file));
                 const name = routeFileToName.get(normalized);
 
                 if (name !== undefined) {
@@ -520,19 +544,19 @@ export default ${JSON.stringify(route.css)}
           const manifest = JSON.parse(asset.source as string) as Manifest;
 
           for (const info of Object.values(manifest)) {
-            if (info.name?.startsWith("_fresh-route___")) {
-              const filePath = path.join(serverOutDir, info.file);
-              const content = await Deno.readTextFile(filePath);
+            // Utility-file(_app/_layout/_error)'s CSS can be hoisted into
+            // shared chunks like "server-entry", not just route chunks.
+            // Replace placeholders in any emitted JS chunk that contains one.
+            if (!/\.(?:c|m)?js$/.test(info.file)) continue;
 
-              const replaced = content.replace(
-                `["__FRESH_CSS_PLACEHOLDER__"]`,
-                info.css
-                  ? JSON.stringify(info.css.map((css) => `/${css}`))
-                  : "null",
-              );
+            const filePath = path.join(serverOutDir, info.file);
+            const content = await Deno.readTextFile(filePath);
+            if (!content.includes(FRESH_CSS_PLACEHOLDER)) continue;
 
-              await Deno.writeTextFile(filePath, replaced);
-            }
+            // Replace all placeholders in the file with the CSS
+            const replaced = replaceFreshCssPlaceholders(content, info.css);
+
+            await Deno.writeTextFile(filePath, replaced);
           }
         }
       },

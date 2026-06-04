@@ -6,6 +6,24 @@ description: |
 Fresh provides built-in helpers for upgrading HTTP connections to WebSockets.
 There are two main approaches depending on your use case.
 
+> [info]: WebSocket upgrades under the Vite dev server (`deno task dev`) require
+> **Fresh 2.4+** and **Deno 2.8+**. On older versions `Deno.upgradeWebSocket()`
+> cannot complete the 101 handshake for requests Vite forwards from its Node
+> HTTP server, so `ctx.upgrade()` and `app.ws()` silently hang and the `open`
+> handler is never invoked.
+>
+> If you're stuck on an older Deno or Fresh, exercise WebSocket endpoints with a
+> production-style build instead:
+>
+> ```sh
+> deno task build && deno task start
+> ```
+>
+> This runs `deno serve` directly, so `Deno.upgradeWebSocket()` works as
+> expected. Alternatively, run a separate Deno entry point (e.g.
+> `deno serve -A main.ts`) alongside Vite, or host the WebSocket server as a
+> sidecar on its own port.
+
 ## Quick start with `app.ws()`
 
 The simplest way to add a WebSocket endpoint:

@@ -27,6 +27,30 @@ integrationTest("vite dev - launches", async () => {
   expect(text).toContain("it works");
 });
 
+integrationTest("vite dev - upgrades WebSocket connections", async () => {
+  const address = demoServer.address();
+  const wsUrl = address.replace(/^http/, "ws") + "/tests/ws_echo";
+
+  const ws = new WebSocket(wsUrl);
+  const reply = await new Promise<string>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error("timed out waiting for echo")),
+      5000,
+    );
+    ws.onopen = () => ws.send("hello");
+    ws.onmessage = (e) => {
+      clearTimeout(timer);
+      resolve(typeof e.data === "string" ? e.data : "");
+    };
+    ws.onerror = () => {
+      clearTimeout(timer);
+      reject(new Error("websocket errored"));
+    };
+  });
+  ws.close();
+  expect(reply).toBe("echo: hello");
+});
+
 integrationTest("vite dev - serves static files", async () => {
   const res = await fetch(`${demoServer.address()}/test_static/foo.txt`);
   const text = await res.text();
@@ -68,6 +92,23 @@ integrationTest("vite dev - starts without islands/ dir", async () => {
     expect(text).toContain("ok");
   });
 });
+
+// Issue: https://github.com/denoland/fresh/issues/3806
+// Pages without islands must still load the client entry in dev so the
+// HMR `fresh:reload` listener attaches and route edits trigger a refresh.
+integrationTest(
+  "vite dev - injects client entry on islands-free pages for HMR",
+  async () => {
+    const fixture = path.join(FIXTURE_DIR, "no_islands");
+    await withDevServer(fixture, async (address) => {
+      const res = await fetch(`${address}/`);
+      const text = await res.text();
+      expect(text).toContain("ok");
+      expect(text).toContain("/@id/fresh:client-entry");
+      expect(text).toMatch(/import\s*\{\s*boot\s*\}/);
+    });
+  },
+);
 
 integrationTest("vite dev - starts without routes/ dir", async () => {
   const fixture = path.join(FIXTURE_DIR, "no_routes");
@@ -277,6 +318,77 @@ integrationTest(
           .evaluate((el) => window.getComputedStyle(el as any).color);
         expect(color).toEqual("rgb(255, 0, 0)");
         return true;
+      });
+    });
+  },
+);
+
+integrationTest(
+  "vite dev - css modules in _app/_layout/_error non-island component are injected",
+  async () => {
+    const fixture = path.join(FIXTURE_DIR, "non_island_css_modules");
+    await launchDevServer(fixture, async (address) => {
+      await withBrowser(async (page) => {
+        {
+          // check _app/_layout
+          await page.goto(`${address}`, {
+            waitUntil: "networkidle2",
+          });
+
+          const _app = await page
+            .locator<HTMLHeadingElement>(".green > h1")
+            .evaluate((el) => window.getComputedStyle(el).color);
+          expect(_app).toEqual("rgb(0, 128, 0)");
+
+          const _layout = await page
+            .locator<HTMLHeadingElement>(".red > h1")
+            .evaluate((el) => window.getComputedStyle(el).color);
+          expect(_layout).toEqual("rgb(255, 0, 0)");
+        }
+
+        {
+          // check _app/_layout/_error
+          await page.goto(`${address}/boom`, {
+            waitUntil: "networkidle2",
+          });
+
+          const _app = await page
+            .locator<HTMLHeadingElement>(".green > h1")
+            .evaluate((el) => window.getComputedStyle(el).color);
+          expect(_app).toEqual("rgb(0, 128, 0)");
+
+          const _layout = await page
+            .locator<HTMLHeadingElement>(".red > h1")
+            .evaluate((el) => window.getComputedStyle(el).color);
+          expect(_layout).toEqual("rgb(255, 0, 0)");
+
+          const _error = await page
+            .locator<HTMLHeadingElement>(".blue > h1")
+            .evaluate((el) => window.getComputedStyle(el).color);
+          expect(_error).toEqual("rgb(0, 0, 255)");
+        }
+
+        {
+          // check _app/_layout/_404
+          await page.goto(`${address}/non_existent`, {
+            waitUntil: "networkidle2",
+          });
+
+          const _app = await page
+            .locator<HTMLHeadingElement>(".green > h1")
+            .evaluate((el) => window.getComputedStyle(el).color);
+          expect(_app).toEqual("rgb(0, 128, 0)");
+
+          const _layout = await page
+            .locator<HTMLHeadingElement>(".red > h1")
+            .evaluate((el) => window.getComputedStyle(el).color);
+          expect(_layout).toEqual("rgb(255, 0, 0)");
+
+          const _404 = await page
+            .locator<HTMLHeadingElement>(".orange > h1")
+            .evaluate((el) => window.getComputedStyle(el).color);
+          expect(_404).toEqual("rgb(255, 165, 0)");
+        }
       });
     });
   },
