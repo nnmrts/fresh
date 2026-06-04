@@ -212,7 +212,7 @@ export class MemoryBuildCache<State> implements DevBuildCache<State> {
       Array.from(this.islandModNameToChunk.entries()).map(
         async ([name, chunk]) => {
           const fileUrl = maybeToFileUrl(chunk.server);
-          const mod = await import(fileUrl);
+          const mod = await import(/* @vite-ignore */ fileUrl);
 
           if (chunk.browser === null) {
             throw new Error(`Unexpected missing browser chunk`);
@@ -230,7 +230,7 @@ export class MemoryBuildCache<State> implements DevBuildCache<State> {
       const fileUrl = maybeToFileUrl(file.filePath);
       return {
         ...file,
-        mod: file.lazy ? () => import(fileUrl) : await import(fileUrl),
+        mod: file.lazy ? () => import(/* @vite-ignore */ fileUrl) : await import(/* @vite-ignore */ fileUrl),
       };
     }));
     this.#commands = fsItemsToCommands(files);
