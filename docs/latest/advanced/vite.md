@@ -113,7 +113,7 @@ types so HMR and asset imports type-check:
       "preact": "npm:preact@^10",
       "@preact/signals": "npm:@preact/signals@^2",
 +     "@fresh/plugin-vite": "jsr:@fresh/plugin-vite@^1",
-+     "vite": "npm:vite@^7",
++     "vite": "npm:vite@^8.0.16",
 +     "@types/babel__core": "npm:@types/babel__core@^7"
     },
     "compilerOptions": {
