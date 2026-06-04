@@ -1,4 +1,5 @@
 import type { DevEnvironment, Plugin } from "vite";
+import dns from "node:dns";
 import * as path from "@std/path";
 import { contentType as getStdContentType } from "@std/media-types/content-type";
 import { ASSET_CACHE_BUST_KEY, upgradeSourceMap } from "fresh/internal";
@@ -18,6 +19,15 @@ export function devServer(freshConfig: ResolvedFreshViteConfig): Plugin[] {
       sharedDuringBuild: true,
       configResolved(config) {
         publicDir = config.publicDir;
+
+        // Keep the dev server's printed URL as `localhost` instead of the
+        // numeric loopback address. On Node 17+ / Deno, `localhost` resolves
+        // such that Vite's `getLocalhostAddressIfDiffersFromDNS()` swaps in
+        // `127.0.0.1` for display; the `verbatim` DNS order makes that helper
+        // bail out, so the name stays `localhost`.
+        if (config.command === "serve") {
+          dns.setDefaultResultOrder("verbatim");
+        }
       },
       configureServer(server) {
         // Build the ignore pattern accounting for the configured base path.
