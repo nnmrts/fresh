@@ -23,7 +23,12 @@ export async function crawlRouteDir<State>(
     // during route collection.
     const match = entry.path.match(GROUP_REG);
     if (match !== null) {
-      if (match[1] === "_islands") {
+      // Only a direct child of an `(_islands)` folder is an island entry
+      // point. Files in nested subfolders are sub-components or shared
+      // helpers reached *through* an island (and bundled into it), not
+      // islands themselves, so they must not be registered as entries.
+      const rest = entry.path.slice((match.index ?? 0) + match[0].length);
+      if (match[1] === "_islands" && !/[/\\]/.test(rest)) {
         onIslandSpecifier(entry.path);
       }
       return;

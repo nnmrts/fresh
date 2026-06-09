@@ -102,6 +102,7 @@ export function fresh(config?: FreshViteConfig): Plugin[] {
             alias: {
               "react-dom/test-utils": "preact/test-utils",
               "react-dom": "preact/compat",
+              "react-reconciler": "preact-reconciler",
               react: "preact/compat",
             },
             // Disallow externals, because it leads to duplicate

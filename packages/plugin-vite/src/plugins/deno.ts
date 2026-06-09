@@ -215,7 +215,7 @@ export function deno(): Plugin {
           return null;
         }
 
-        const type = getDenoType(id, options.attributes.type ?? "default");
+        const type = getDenoType(id, options.attributes?.type ?? "default");
         if (
           type !== RequestedModuleType.Default ||
           /^(https?|jsr|npm):/.test(resolved)
