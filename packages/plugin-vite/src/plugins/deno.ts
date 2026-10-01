@@ -26,19 +26,23 @@ const IMPORT_WITH_TYPE_RE =
   /from\s+["']([^"']+)["']\s*with\s*\{\s*type\s*:\s*["'](text|bytes)["']\s*,?\s*\}/g;
 
 const DENO_BYTES_SUFFIX = "?deno-bytes";
+const DENO_TEXT_SUFFIX = "?deno-text";
 
 /**
  * Bridges Deno-style `with { type: "text"|"bytes" }` import attributes
  * to Vite-compatible mechanisms, since Rolldown does not pass import
  * attributes to plugin hooks.
  *
- * - `type: "text"` → appends Vite's `?raw` suffix
+ * - `type: "text"` → appends Vite's `?raw` suffix, or `?deno-text` when the
+ *   specifier resolved to a Deno module (a remote URL or a jsr/npm file),
+ *   which Vite's `?raw` cannot read, and serves it via load hook
  * - `type: "bytes"` → appends `?deno-bytes` and serves via load hook
  */
 export function denoImportAttrs(): Plugin {
   // Cache: importer path → map of specifier → type
   // Invalidated on file change via watchChange hook.
   const attrImports = new Map<string, Map<string, string>>();
+  let textLoader: Promise<Loader> | undefined;
 
   return {
     name: "deno:import-attrs",
@@ -73,16 +77,39 @@ export function denoImportAttrs(): Plugin {
           skipSelf: true,
         });
         if (resolved) {
-          const suffix = importType === "text" ? "?raw" : DENO_BYTES_SUFFIX;
+          const suffix = importType === "bytes"
+            ? DENO_BYTES_SUFFIX
+            : isDenoSpecifier(resolved.id)
+            ? DENO_TEXT_SUFFIX
+            : "?raw";
           return { ...resolved, id: resolved.id + suffix };
         }
       }
     },
     load: {
       filter: {
-        id: /\?deno-bytes$/,
+        id: /\?deno-(?:bytes|text)$/,
       },
       async handler(id) {
+        if (id.endsWith(DENO_TEXT_SUFFIX)) {
+          const { specifier } = parseDenoSpecifier(
+            id.slice(0, -DENO_TEXT_SUFFIX.length) as DenoSpecifier,
+          );
+          textLoader ??= new Workspace({ platform: "node", cachedOnly: true })
+            .createLoader();
+          const result = await (await textLoader).load(
+            specifier,
+            RequestedModuleType.Text,
+          );
+          if (result.kind === "external") {
+            return null;
+          }
+          return {
+            code: `export default ${
+              JSON.stringify(new TextDecoder().decode(result.code))
+            };`,
+          };
+        }
         const filePath = id.slice(0, -DENO_BYTES_SUFFIX.length);
         const bytes = await Deno.readFile(filePath);
         return {
