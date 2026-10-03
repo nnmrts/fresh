@@ -186,10 +186,10 @@ export function deno(): Plugin {
 
       // We still want to allow other plugins to participate in
       // resolution, with us being in front due to `enforce: "pre"`.
-      // But we still want to ignore everything `vite:resolve` does
-      // because we're kinda replacing that plugin here.
+      // Upstream also skips results from `vite:resolve` via `resolvedBy`,
+      // which Vite 8 no longer sets, so those are accepted here too.
       const tmp = await this.resolve(id, importer, options);
-      if (tmp && tmp.resolvedBy !== "vite:resolve") {
+      if (tmp) {
         if (tmp.external && !/^https?:\/\//.test(tmp.id)) {
           return tmp;
         }
@@ -242,7 +242,11 @@ export function deno(): Plugin {
           return null;
         }
 
-        const type = getDenoType(id, options.attributes?.type ?? "default");
+        // Vite's dev container passes import attributes, but its types omit them
+        const { attributes } = options as typeof options & {
+          attributes?: Record<string, string>;
+        };
+        const type = getDenoType(id, attributes?.type ?? "default");
         if (
           type !== RequestedModuleType.Default ||
           /^(https?|jsr|npm):/.test(resolved)

@@ -1,3 +1,4 @@
+/** @jsxImportSource preact */
 import type { ComponentChildren } from "preact";
 
 // Just to get some syntax highlighting

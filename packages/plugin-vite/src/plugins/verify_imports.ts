@@ -1,6 +1,5 @@
-import type { Plugin } from "vite";
+import type { Plugin, Rolldown } from "vite";
 import * as cl from "@std/fmt/colors";
-import type { PluginContext } from "rollup";
 import path from "node:path";
 import { pathWithRoot } from "../utils.ts";
 
@@ -155,7 +154,7 @@ export function checkImports(pluginOptions: CheckImportOptions): Plugin {
 }
 
 function findAncestors(
-  ctx: PluginContext,
+  ctx: Rolldown.PluginContext,
   id: string,
   isDev: boolean,
 ): string[] | null {

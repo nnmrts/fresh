@@ -1,3 +1,4 @@
+/** @jsxImportSource preact */
 import { DEV_ERROR_OVERLAY_URL } from "../../../constants.ts";
 import { HttpError } from "../../../error.ts";
 import type { Middleware } from "../../../middlewares/mod.ts";
