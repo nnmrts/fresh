@@ -198,7 +198,13 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
               );
               if (mod !== undefined) {
                 const def = islands.get(id);
-                if (def !== undefined) def.chunk = mod.url;
+                // a virtual island module's url is its bare id, which the
+                // browser can only fetch through vite's /@id/ prefix
+                if (def !== undefined) {
+                  def.chunk = mod.url.startsWith("/")
+                    ? mod.url
+                    : `/@id/${mod.url}`;
+                }
               }
             }
 
