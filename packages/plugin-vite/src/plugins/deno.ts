@@ -260,6 +260,9 @@ export function deno(): Plugin {
 
         return {
           id: resolved,
+          // Keep what Vite read from the package's `sideEffects` field, or a
+          // package marked free of side effects is never tree-shaken.
+          moduleSideEffects: tmp?.moduleSideEffects,
           meta: {
             deno: {
               type,
