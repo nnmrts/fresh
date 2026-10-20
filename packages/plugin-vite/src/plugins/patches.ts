@@ -27,8 +27,24 @@ export function patches(): Plugin {
         id: JS_REG,
       },
       handler(code, id) {
+        const isJsx = this.environment.config.consumer === "client" &&
+          JSX_REG.test(id);
+
+        // The patches below only touch CommonJS, `process`, `Deno.env`,
+        // `import.meta.env`, `@jsx` comments and a few polyfill checks, so a
+        // plain ES module without any of them would come back the same after
+        // a full parse, print and source map.
+        if (
+          !isJsx &&
+          /^\s*(?:import|export)\b/m.test(code) &&
+          !/\brequire\s*\(|\bexports\b|__esModule|__dirname|__filename|\bprocess\b|\bDeno\b|import\.meta\.env|@jsx|typeof\s*\(?\s*(?:String\.fromCodePoint|Object\.(?:keys|create))/
+            .test(code)
+        ) {
+          return;
+        }
+
         const presets = [];
-        if (this.environment.config.consumer === "client" && JSX_REG.test(id)) {
+        if (isJsx) {
           presets.push([babelReact, {
             runtime: "automatic",
             importSource: "preact",

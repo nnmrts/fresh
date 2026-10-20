@@ -489,10 +489,21 @@ function babelTransform(
 
   const { ssr, code, id, isDev } = options;
 
-  const presets: babel.PluginItem[] = [];
+  const isJsx = !ssr && (id.endsWith(".tsx") || id.endsWith(".jsx"));
+  const url = URL.canParse(id) ? new URL(id) : null;
+
+  // Babel only changes a module through JSX or through `httpAbsolute`, which
+  // rewrites import sources starting with `/` or `http(s)://`. Anything else
+  // would come back the same after a full parse, print and source map.
   if (
-    !ssr && (id.endsWith(".tsx") || id.endsWith(".jsx"))
+    !isJsx &&
+    (url === null || !/(?:from|import)\s*\(?\s*["'`](?:\/|https?:\/\/)/.test(code))
   ) {
+    return null;
+  }
+
+  const presets: babel.PluginItem[] = [];
+  if (isJsx) {
     presets.push([babelReact, {
       runtime: "automatic",
       importSource: "preact",
@@ -500,8 +511,6 @@ function babelTransform(
       throwIfNamespace: false,
     }]);
   }
-
-  const url = URL.canParse(id) ? new URL(id) : null;
 
   const result = babel.transformSync(code, {
     filename: id,
