@@ -87,6 +87,8 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
       configureServer(viteServer) {
         server = viteServer;
 
+        let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+
         viteServer.watcher.on("all", (ev, filePath) => {
           const { client, ssr } = viteServer.environments;
 
@@ -112,6 +114,9 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
             }
           }
 
+          let reload = mods !== undefined ||
+            ssr.moduleGraph.getModulesByFile(filePath) !== undefined;
+
           // Check for route files. We need to invalidate the snapshot if
           // they are removed or added.
           if (
@@ -128,12 +133,19 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
                 islandSpecByName.clear();
 
                 ssr.moduleGraph.invalidateModule(mod);
+                reload = true;
               }
             }
           }
 
+          if (!reload) return;
+
           // Finally, notify the client
-          viteServer.ws.send("fresh:reload");
+          clearTimeout(reloadTimer);
+          reloadTimer = setTimeout(
+            () => viteServer.ws.send("fresh:reload"),
+            250,
+          );
         });
       },
       resolveId: {

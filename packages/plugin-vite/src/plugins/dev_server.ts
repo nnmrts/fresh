@@ -38,6 +38,19 @@ export function devServer(freshConfig: ResolvedFreshViteConfig): Plugin[] {
           `^(${base})?/(@(vite|fs|id)|\\.vite)/`,
         );
 
+        let serverEntryQueue = Promise.resolve();
+        const loadServerEntry = async () => {
+          const previous = serverEntryQueue;
+          const { promise, resolve } = Promise.withResolvers<void>();
+          serverEntryQueue = promise;
+          await previous;
+          try {
+            return await server.ssrLoadModule("fresh:server_entry");
+          } finally {
+            resolve();
+          }
+        };
+
         // WebSocket upgrade requests don't flow through Connect middleware —
         // node:http dispatches them as `upgrade` events on the http.Server.
         // Vite's own HMR server identifies its connections via the
@@ -84,7 +97,7 @@ export function devServer(freshConfig: ResolvedFreshViteConfig): Plugin[] {
 
               upgradeSourceMap.set(req, { socket: nodeSocket, head });
 
-              const mod = await server.ssrLoadModule("fresh:server_entry");
+              const mod = await loadServerEntry();
               mod.setErrorInterceptor((err: unknown) => {
                 if (err instanceof Error) server.ssrFixStacktrace(err);
               });
@@ -190,8 +203,9 @@ export function devServer(freshConfig: ResolvedFreshViteConfig): Plugin[] {
           }
 
           try {
-            const mod = await server.ssrLoadModule("fresh:server_entry");
             const req = createRequest(nodeReq, nodeRes);
+            const mod = await loadServerEntry();
+            if (req.signal.aborted) return;
             mod.setErrorInterceptor((err: unknown) => {
               if (err instanceof Error) {
                 server.ssrFixStacktrace(err);
@@ -199,6 +213,10 @@ export function devServer(freshConfig: ResolvedFreshViteConfig): Plugin[] {
             });
 
             const res = (await mod.default.fetch(req)) as Response;
+            if (req.signal.aborted) {
+              await res.body?.cancel();
+              return;
+            }
 
             // Collect css eagerly to avoid FOUC. This is a workaround for
             // Vite not supporting css natively. It's a bit hacky, but
@@ -246,29 +264,6 @@ export function devServer(freshConfig: ResolvedFreshViteConfig): Plugin[] {
             return next(err);
           }
         });
-      },
-    },
-    {
-      name: "fresh:server_hmr",
-      applyToEnvironment(env) {
-        return env.config.consumer === "server";
-      },
-      hotUpdate(options) {
-        const clientMod = options.server.environments.client.moduleGraph
-          .getModulesByFile(options.file);
-
-        if (clientMod !== undefined) {
-          // Vite can do HMR here
-          return;
-        }
-
-        const ssrMod = options.server.environments.ssr.moduleGraph
-          .getModulesByFile(options.file);
-        if (ssrMod !== undefined) {
-          // SSR-only module. Might still be a route.
-          // TODO: Implement proper ssr hmr
-          options.server.hot.send("fresh:reload");
-        }
       },
     },
   ];
