@@ -1,5 +1,6 @@
 import type { DevEnvironment, Plugin } from "vite";
 import dns from "node:dns";
+import process from "node:process";
 import * as path from "@std/path";
 import { contentType as getStdContentType } from "@std/media-types/content-type";
 import { ASSET_CACHE_BUST_KEY, upgradeSourceMap } from "fresh/internal";
@@ -30,6 +31,8 @@ export function devServer(freshConfig: ResolvedFreshViteConfig): Plugin[] {
         }
       },
       configureServer(server) {
+        process.removeAllListeners("SIGTRAP");
+
         // Build the ignore pattern accounting for the configured base path.
         // Vite prefixes virtual module URLs with the base (e.g. /ui/@id/...),
         // so we need to match both /@ and /base/@.
@@ -246,7 +249,6 @@ export function devServer(freshConfig: ResolvedFreshViteConfig): Plugin[] {
 
               const styles = collected.join("\n");
               html = html.replace("</head>", styles + "</head>");
-
 
               const newRes = new Response(html, {
                 status: res.status,

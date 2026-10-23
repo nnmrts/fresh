@@ -182,9 +182,11 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
 
           for (let i = 0; i < result.routes.length; i++) {
             const route = result.routes[i];
-            const name = routeNamer.getUniqueName(route.id);
+            const filePath = toPosix(route.filePath);
+            const name = routeFileToName.get(filePath) ??
+              routeNamer.getUniqueName(route.id);
 
-            routeFileToName.set(toPosix(route.filePath), name);
+            routeFileToName.set(filePath, name);
             routes.set(name, route);
           }
 
