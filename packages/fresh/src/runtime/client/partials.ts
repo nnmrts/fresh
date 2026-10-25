@@ -83,7 +83,7 @@ if (!history.state) {
   history.replaceState(state, document.title);
 }
 
-function maybePushHistory(nextUrl: URL) {
+function maybePushHistory(nextUrl: URL, keepScroll = false) {
   // Only add history entry when URL is new. Still apply
   // the partials because sometimes users click a link to
   // "refresh" the current page.
@@ -100,8 +100,10 @@ function maybePushHistory(nextUrl: URL) {
 
     // Now store the new position
     index++;
-    state.scrollX = 0;
-    state.scrollY = 0;
+    if (!keepScroll) {
+      state.scrollX = 0;
+      state.scrollY = 0;
+    }
     history.pushState(state, "", nextUrl.href);
   }
 }
@@ -159,8 +161,11 @@ document.addEventListener("click", async (e) => {
       e.preventDefault();
 
       const nextUrl = new URL(el.href);
+      // Links that only change the query of the current page, like a
+      // picker swapping a partial, keep the reader where they are.
+      const isSamePage = nextUrl.pathname === location.pathname;
       try {
-        maybePushHistory(nextUrl);
+        maybePushHistory(nextUrl, isSamePage);
 
         const partialUrl = new URL(
           partial ? partial : nextUrl.href,
@@ -170,7 +175,9 @@ document.addEventListener("click", async (e) => {
           await fetchPartials(nextUrl, partialUrl, true);
           updateLinks(nextUrl);
         });
-        scrollTo({ left: 0, top: 0, behavior: "instant" });
+        if (!isSamePage) {
+          scrollTo({ left: 0, top: 0, behavior: "instant" });
+        }
       } finally {
         if (indicator !== undefined) {
           indicator.value = false;
