@@ -8,6 +8,7 @@ import { sortRoutePaths } from "../fs_routes.ts";
 import type { RouteConfig } from "../types.ts";
 
 const GROUP_REG = /[/\\\\]\((_[^/\\\\]+)\)[/\\\\]/;
+const ISLANDS_REG = /[/\\\\]\(_islands\)[/\\\\]/;
 
 export async function crawlRouteDir<State>(
   fs: FsAdapter,
@@ -27,8 +28,12 @@ export async function crawlRouteDir<State>(
       // point. Files in nested subfolders are sub-components or shared
       // helpers reached *through* an island (and bundled into it), not
       // islands themselves, so they must not be registered as entries.
-      const rest = entry.path.slice((match.index ?? 0) + match[0].length);
-      if (match[1] === "_islands" && !/[/\\]/.test(rest)) {
+      // The `(_islands)` folder may sit inside another `(_...)` group.
+      const islands = entry.path.match(ISLANDS_REG);
+      const rest = islands === null
+        ? "/"
+        : entry.path.slice((islands.index ?? 0) + islands[0].length);
+      if (!/[/\\]/.test(rest)) {
         onIslandSpecifier(entry.path);
       }
       return;
