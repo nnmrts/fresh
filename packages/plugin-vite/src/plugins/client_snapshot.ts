@@ -172,7 +172,7 @@ function isIslandPath(
 
   const relRoutes = path.relative(options.routeDir, filePath);
 
-  if (!relIsland.startsWith("..") && relRoutes.includes("(_islands)")) {
+  if (!relRoutes.startsWith("..") && relRoutes.includes("(_islands)")) {
     return true;
   }
   return false;

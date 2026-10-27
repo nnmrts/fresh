@@ -52,9 +52,17 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
   const islandSpecByName = new Map<string, string>();
   const routeNamer = new UniqueNamer();
   const routeFileToName = new Map<string, string>();
+  const islandFileToName = new Map<string, string>();
 
   // deno-lint-ignore no-explicit-any
   const routes: Map<string, FsRouteFileNoMod<any>> = new Map();
+
+  const seedIslands = () => {
+    options.islandSpecifiers.forEach((name, spec) => {
+      islands.set(spec, { name, chunk: null });
+      islandSpecByName.set(name, spec);
+    });
+  };
 
   return [
     {
@@ -78,11 +86,7 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
           config.root,
         );
 
-        options.islandSpecifiers.forEach((name, spec) => {
-          islands.set(spec, { name, chunk: null });
-          islandSpecByName.set(name, spec);
-          // islandsByFile.add(spec);
-        });
+        seedIslands();
       },
       configureServer(viteServer) {
         server = viteServer;
@@ -91,6 +95,37 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
 
         viteServer.watcher.on("all", (ev, filePath) => {
           const { client, ssr } = viteServer.environments;
+
+          // An added or removed route or island changes what the snapshot
+          // imports, so rebuild it before anything else can return early.
+          // Inside the route dir, `(_…)` folders hold no routes, but
+          // `(_islands)` folders hold islands.
+          if (ev === "add" || ev === "unlink") {
+            const relRoutes = path.relative(options.routeDir, filePath);
+            const relIslands = path.relative(options.islandsDir, filePath);
+            const isRouteOrIsland = !relIslands.startsWith("..") || (
+              !relRoutes.startsWith("..") && (
+                relRoutes.includes("(_islands)") ||
+                !/[\\/]+\(_[^)]+\)[\\/]+/.test(filePath)
+              )
+            );
+            const mod = ssr.moduleGraph.getModuleById(`\0${modName}`);
+
+            if (isRouteOrIsland && mod !== undefined) {
+              islands.clear();
+              islandsByFile.clear();
+              islandSpecByName.clear();
+              seedIslands();
+              ssr.moduleGraph.invalidateModule(mod);
+
+              clearTimeout(reloadTimer);
+              reloadTimer = setTimeout(
+                () => viteServer.ws.send("fresh:reload"),
+                250,
+              );
+              return;
+            }
+          }
 
           // We can't just check if it's in the client module graph
           // because plugins like tailwindcss import _everything_.
@@ -114,29 +149,8 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
             }
           }
 
-          let reload = mods !== undefined ||
+          const reload = mods !== undefined ||
             ssr.moduleGraph.getModulesByFile(filePath) !== undefined;
-
-          // Check for route files. We need to invalidate the snapshot if
-          // they are removed or added.
-          if (
-            (ev === "add" || ev === "unlink") &&
-            !/[\\/]+\(_[^)]+\)[\\/]+/.test(filePath)
-          ) {
-            const relRoutes = path.relative(options.routeDir, filePath);
-            if (!relRoutes.startsWith("..")) {
-              const mod = ssr.moduleGraph.getModuleById(`\0${modName}`);
-              if (mod !== undefined) {
-                // Clear state
-                islands.clear();
-                islandsByFile.clear();
-                islandSpecByName.clear();
-
-                ssr.moduleGraph.invalidateModule(mod);
-                reload = true;
-              }
-            }
-          }
 
           if (!reload) return;
 
@@ -172,9 +186,12 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
 
           for (let i = 0; i < result.islands.length; i++) {
             const spec = result.islands[i];
-            const specName = specToName(spec);
-            const name = options.namer.getUniqueName(specName);
+            // Keep each island's name across snapshot reloads: the browser
+            // still asks for `fresh-island::<name>` by the name it was given.
+            const name = islandFileToName.get(spec) ??
+              options.namer.getUniqueName(specToName(spec));
 
+            islandFileToName.set(spec, name);
             islands.set(spec, { name, chunk: null });
             islandSpecByName.set(name, spec);
             islandsByFile.add(spec);
