@@ -41,6 +41,27 @@ export function devServer(freshConfig: ResolvedFreshViteConfig): Plugin[] {
           `^(${base})?/(@(vite|fs|id)|\\.vite)/`,
         );
 
+        // Vite's module runner trusts the server to say when a server module
+        // is out of date, and the server answers "unchanged" for any module
+        // that still has a transform result. After a change, importers of the
+        // changed module can end up evaluated against a mix of old and new
+        // copies, and pages render stale or inconsistent data until the dev
+        // server is restarted. Start from a clean slate after every change.
+        let ssrDirty = false;
+        server.watcher.on("all", (_event, file) => {
+          const modules = server.environments.ssr.moduleGraph
+            .getModulesByFile(file.replaceAll("\\", "/"));
+          if (modules !== undefined) ssrDirty = true;
+        });
+
+        const resetSsrModules = () => {
+          if (!ssrDirty) return;
+          ssrDirty = false;
+          server.environments.ssr.moduleGraph.invalidateAll();
+          // deno-lint-ignore no-explicit-any
+          (server as any)._ssrCompatModuleRunner?.clearCache();
+        };
+
         let serverEntryQueue = Promise.resolve();
         const loadServerEntry = async () => {
           const previous = serverEntryQueue;
@@ -48,6 +69,7 @@ export function devServer(freshConfig: ResolvedFreshViteConfig): Plugin[] {
           serverEntryQueue = promise;
           await previous;
           try {
+            resetSsrModules();
             return await server.ssrLoadModule("fresh:server_entry");
           } finally {
             resolve();
