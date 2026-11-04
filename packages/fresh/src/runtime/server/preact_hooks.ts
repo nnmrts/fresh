@@ -393,6 +393,10 @@ options[OptionsType.DIFF] = (vnode) => {
               break;
             }
 
+            if (vnode.type === "title" && isInsideSvg(vnode)) {
+              break;
+            }
+
             const originalType = vnode.type;
 
             let cacheKey: string | null = vnode.key ??
@@ -557,6 +561,21 @@ function Slot(props: SlotProps) {
     RENDER_STATE.slots[props.id] = null;
   }
   return wrapWithMarker(props.children, "slot", `${props.id}:${props.name}`);
+}
+
+function isInsideSvg(vnode: InternalVNode): boolean {
+  let parent = vnode.__;
+  while (parent !== null && parent !== undefined) {
+    if (parent.type === "svg") {
+      return true;
+    }
+    if (parent.type === "foreignObject") {
+      return false;
+    }
+    parent = parent.__;
+  }
+
+  return false;
 }
 
 /**

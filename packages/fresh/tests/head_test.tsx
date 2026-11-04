@@ -50,6 +50,46 @@ Deno.test("Head - ssr - updates title", async () => {
   expect(doc.querySelector("h1")?.textContent).toEqual("heading");
 });
 
+Deno.test("Head - ssr - keeps svg titles in their svg", async () => {
+  const handler = new App()
+    .appWrapper(({ Component }) => {
+      return (
+        <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <title>not ok</title>
+          </head>
+          <body>
+            <Component />
+          </body>
+        </html>
+      );
+    })
+    .get("/", (ctx) => {
+      return ctx.render(
+        <>
+          <Head>
+            <title>ok</title>
+          </Head>
+          <svg>
+            <rect>
+              <title>tooltip</title>
+            </rect>
+          </svg>
+        </>,
+      );
+    }).handler();
+
+  const server = new FakeServer(handler);
+  const res = await server.get("/");
+
+  const doc = parseHtml(await res.text());
+
+  expect(doc.querySelector("head title")?.textContent).toEqual("ok");
+  expect(doc.querySelectorAll("head title").length).toEqual(1);
+  expect(doc.querySelector("svg rect title")?.textContent).toEqual("tooltip");
+});
+
 Deno.test("Head - ssr - updates meta", async () => {
   const handler = new App()
     .appWrapper(({ Component }) => {
