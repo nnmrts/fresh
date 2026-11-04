@@ -444,6 +444,7 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
             entryAssets,
             fsRoutesFiles: result.routes,
             islands: islandMods,
+            lazyIslands: isDev,
             writeSpecifier: (file) => {
               const def = islands.get(file);
               if (def) {
@@ -502,6 +503,24 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
             }
           }
         },
+      },
+    },
+    {
+      name: "fresh:lazy-islands",
+      enforce: "post",
+      applyToEnvironment(env) {
+        return env.name === "ssr";
+      },
+      transform(code, id) {
+        const name = isDev ? islandFileToName.get(id) : undefined;
+        if (name === undefined) return;
+
+        return `${code}
+import * as __freshIsland from ${JSON.stringify(id)};
+globalThis[Symbol.for("fresh.registerIsland")]?.(${
+          JSON.stringify(name)
+        }, __freshIsland);
+`;
       },
     },
     {

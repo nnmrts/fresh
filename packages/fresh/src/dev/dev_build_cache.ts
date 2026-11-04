@@ -464,17 +464,19 @@ export async function generateSnapshotServer(
     fsRoutesFiles: FsRouteFileNoMod<any>[];
     staticFiles: PendingStaticFile[];
     entryAssets: string[];
+    lazyIslands?: boolean;
     writeSpecifier: (filePath: string) => string;
   },
 ): Promise<string> {
   const {
     islands,
+    lazyIslands = false,
     writeSpecifier,
     fsRoutesFiles,
     outDir,
   } = options;
 
-  const islandImports = islands
+  const islandImports = lazyIslands ? "" : islands
     .map((item) => {
       const spec = writeSpecifier(item.server);
       return `import * as ${item.name} from "${spec}";`;
@@ -490,12 +492,26 @@ export async function generateSnapshotServer(
     .filter(Boolean)
     .join("\n");
 
-  const islandMarkers = islands.map((item) => {
-    const browser = JSON.stringify(item.browser);
-    const name = JSON.stringify(item.name);
-    const css = JSON.stringify(item.css);
-    return `islandPreparer.prepare(islands, ${item.name}, ${browser}, ${name}, ${css});`;
-  }).join("\n");
+  const islandMarkers = lazyIslands
+    ? `const islandFiles = new Map(${
+      JSON.stringify(
+        islands.map((item) => [item.name, [item.browser, item.css]]),
+      )
+    });
+const loadedIslands = globalThis[Symbol.for("fresh.loadedIslands")] ??= new Map();
+const registerIsland = (name, mod) => {
+  const file = islandFiles.get(name);
+  loadedIslands.set(name, mod);
+  if (file !== undefined) islandPreparer.prepare(islands, mod, file[0], name, file[1]);
+};
+loadedIslands.forEach((mod, name) => registerIsland(name, mod));
+globalThis[Symbol.for("fresh.registerIsland")] = registerIsland;`
+    : islands.map((item) => {
+      const browser = JSON.stringify(item.browser);
+      const name = JSON.stringify(item.name);
+      const css = JSON.stringify(item.css);
+      return `islandPreparer.prepare(islands, ${item.name}, ${browser}, ${name}, ${css});`;
+    }).join("\n");
 
   const serializedFsRoutes = fsRoutesFiles
     .map((item, i) => {
