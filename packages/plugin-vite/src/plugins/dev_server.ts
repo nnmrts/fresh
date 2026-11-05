@@ -47,6 +47,10 @@ export function devServer(freshConfig: ResolvedFreshViteConfig): Plugin[] {
         // changed module can end up evaluated against a mix of old and new
         // copies, and pages render stale or inconsistent data until the dev
         // server is restarted. Start from a clean slate after every change.
+        const isKeptModule = (id: string | null | undefined) =>
+          typeof id === "string" &&
+          /\/node_modules\/|\/packages\/fresh\/src\/|deno::/.test(id);
+
         let ssrDirty = false;
         server.watcher.on("all", (_event, file) => {
           const modules = server.environments.ssr.moduleGraph
@@ -57,9 +61,20 @@ export function devServer(freshConfig: ResolvedFreshViteConfig): Plugin[] {
         const resetSsrModules = () => {
           if (!ssrDirty) return;
           ssrDirty = false;
-          server.environments.ssr.moduleGraph.invalidateAll();
+
+          const { moduleGraph } = server.environments.ssr;
+
+          for (const mod of moduleGraph.idToModuleMap.values()) {
+            if (!isKeptModule(mod.id)) moduleGraph.invalidateModule(mod);
+          }
+
           // deno-lint-ignore no-explicit-any
-          (server as any)._ssrCompatModuleRunner?.clearCache();
+          const evaluated = (server as any)._ssrCompatModuleRunner
+            ?.evaluatedModules;
+
+          for (const node of evaluated?.idToModuleMap.values() ?? []) {
+            if (!isKeptModule(node.id)) evaluated.invalidateModule(node);
+          }
         };
 
         let serverEntryQueue = Promise.resolve();
