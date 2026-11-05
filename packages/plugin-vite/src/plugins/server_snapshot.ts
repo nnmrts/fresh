@@ -114,7 +114,6 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
             if (isRouteOrIsland && mod !== undefined) {
               islands.clear();
               islandsByFile.clear();
-              islandSpecByName.clear();
               seedIslands();
               ssr.moduleGraph.invalidateModule(mod);
 

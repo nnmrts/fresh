@@ -59,10 +59,13 @@ export function devServer(freshConfig: ResolvedFreshViteConfig): Plugin[] {
         });
 
         const resetSsrModules = () => {
-          if (!ssrDirty) return;
-          ssrDirty = false;
-
           const { moduleGraph } = server.environments.ssr;
+          const snapshot = moduleGraph.getModuleById(
+            "\0fresh:server-snapshot",
+          );
+
+          if (!ssrDirty && snapshot?.transformResult !== null) return;
+          ssrDirty = false;
 
           for (const mod of moduleGraph.idToModuleMap.values()) {
             if (!isKeptModule(mod.id)) moduleGraph.invalidateModule(mod);
@@ -277,8 +280,12 @@ export function devServer(freshConfig: ResolvedFreshViteConfig): Plugin[] {
               // to pick up their CSS module imports.
               for (const mod of clientEnv.moduleGraph.idToModuleMap.values()) {
                 if (mod.id?.includes("fresh-island::")) {
-                  const islandCss = await collectCss(mod.id, clientEnv);
-                  collected.push(...islandCss);
+                  try {
+                    const islandCss = await collectCss(mod.id, clientEnv);
+                    collected.push(...islandCss);
+                  } catch {
+                    continue;
+                  }
                 }
               }
 
