@@ -501,7 +501,6 @@ export async function generateSnapshotServer(
 const loadedIslands = globalThis[Symbol.for("fresh.loadedIslands")] ??= new Map();
 const registerIsland = (name, mod) => {
   const file = islandFiles.get(name);
-  loadedIslands.set(name, mod);
   if (file !== undefined) islandPreparer.prepare(islands, mod, file[0], name, file[1]);
 };
 loadedIslands.forEach((mod, name) => registerIsland(name, mod));

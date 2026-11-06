@@ -518,8 +518,14 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
         const name = isDev ? islandFileToName.get(id) : undefined;
         if (name === undefined) return;
 
+        // An island a static snapshot import reaches, such as through `_app`
+        // or `_middleware`, runs before the snapshot's body can install
+        // `registerIsland`, so leave it where that body will find it.
         return `${code}
 import * as __freshIsland from ${JSON.stringify(id)};
+(globalThis[Symbol.for("fresh.loadedIslands")] ??= new Map()).set(${
+          JSON.stringify(name)
+        }, __freshIsland);
 globalThis[Symbol.for("fresh.registerIsland")]?.(${
           JSON.stringify(name)
         }, __freshIsland);
