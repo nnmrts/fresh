@@ -474,8 +474,12 @@ export function serverSnapshot(options: ResolvedFreshViteConfig): Plugin[] {
             if (snapshot === undefined) return;
 
             const queue: EnvironmentModuleNode[] = [mod];
+            const visited = new Set<EnvironmentModuleNode>();
             let item: EnvironmentModuleNode | undefined;
             while ((item = queue.pop()) !== undefined) {
+              if (visited.has(item)) continue;
+              visited.add(item);
+
               if (item.file !== null) {
                 const normalized = toPosix(path.normalize(item.file));
                 const name = routeFileToName.get(normalized);
@@ -672,6 +676,7 @@ function walkUp(
   seen: Set<EnvironmentModuleNode>,
 ): boolean {
   if (seen.has(mod)) return false;
+  seen.add(mod);
 
   if (fn(mod)) return true;
 
