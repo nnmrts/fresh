@@ -109,7 +109,10 @@ if (import.meta.hot) import.meta.hot.accept();`;
       // This is more reliable than the manifest when rollupOptions
       // override output.entryFileNames.
       for (const chunk of Object.values(bundle)) {
-        if (chunk.type === "chunk" && chunk.isEntry) {
+        if (
+          chunk.type === "chunk" && chunk.isEntry &&
+          chunk.name === "server-entry"
+        ) {
           serverEntryFilename = chunk.fileName;
           break;
         }
