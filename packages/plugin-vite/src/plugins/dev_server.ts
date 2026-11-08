@@ -38,7 +38,7 @@ export function devServer(freshConfig: ResolvedFreshViteConfig): Plugin[] {
         // so we need to match both /@ and /base/@.
         const base = server.config.base.replace(/\/$/, "");
         const IGNORE_URLS = new RegExp(
-          `^(${base})?/(@(vite|fs|id)|\\.vite)/`,
+          `^(${base})?/(@(vite|fs|id)|\\.vite|__devtools(-assets)?)/`,
         );
 
         // Vite's module runner trusts the server to say when a server module
