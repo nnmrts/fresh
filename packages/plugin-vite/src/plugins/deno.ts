@@ -424,7 +424,7 @@ function isJsMediaType(media: MediaType): boolean {
 
 export type DenoSpecifier = string & { __deno: string };
 
-function isDenoSpecifier(str: unknown): str is DenoSpecifier {
+export function isDenoSpecifier(str: unknown): str is DenoSpecifier {
   return typeof str === "string" && str.startsWith("\0deno::");
 }
 
@@ -432,7 +432,7 @@ function toDenoSpecifier(spec: string, type: RequestedModuleType) {
   return `\0deno::${type}::${spec}`;
 }
 
-function parseDenoSpecifier(
+export function parseDenoSpecifier(
   spec: DenoSpecifier,
 ): { type: RequestedModuleType; specifier: string } {
   const match = spec.match(/^\0deno::([^:]+)::(.*)$/)!;
@@ -497,7 +497,8 @@ function babelTransform(
   // would come back the same after a full parse, print and source map.
   if (
     !isJsx &&
-    (url === null || !/(?:from|import)\s*\(?\s*["'`](?:\/|https?:\/\/)/.test(code))
+    (url === null ||
+      !/(?:from|import)\s*\(?\s*["'`](?:\/|https?:\/\/)/.test(code))
   ) {
     return null;
   }

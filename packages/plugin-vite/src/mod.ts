@@ -11,6 +11,7 @@ import { serverEntryPlugin } from "./plugins/server_entry.ts";
 import { clientEntryPlugin } from "./plugins/client_entry.ts";
 import { devServer } from "./plugins/dev_server.ts";
 import { buildIdPlugin } from "./plugins/build_id.ts";
+import { barrelImports } from "./plugins/barrel_imports.ts";
 import { clientSnapshot } from "./plugins/client_snapshot.ts";
 import { serverSnapshot } from "./plugins/server_snapshot.ts";
 import { patches } from "./plugins/patches.ts";
@@ -241,6 +242,7 @@ export function fresh(config?: FreshViteConfig): Plugin[] {
     clientEntryPlugin(fConfig),
     ...clientSnapshot(fConfig),
     buildIdPlugin(),
+    barrelImports(),
     ...devServer(fConfig),
     prefresh({
       include: [/\.[cm]?[tj]sx?$/],
