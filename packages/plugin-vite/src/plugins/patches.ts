@@ -37,7 +37,7 @@ export function patches(): Plugin {
         if (
           !isJsx &&
           /^\s*(?:import|export)\b/m.test(code) &&
-          !/\brequire\s*\(|\bexports\b|__esModule|__dirname|__filename|\bprocess\b|\bDeno\b|import\.meta\.env|@jsx|typeof\s*\(?\s*(?:String\.fromCodePoint|Object\.(?:keys|create))/
+          !/\brequire\s*\(|\bexports\b|__esModule|__dirname|__filename|(?<![.$\w])process\b|(?<![.$\w])Deno\s*\.\s*env\b|\buseLegacyCrypto\b|import\.meta\.env|@jsx|typeof\s*\(?\s*(?:String\.fromCodePoint|Object\.(?:keys|create))/
             .test(code)
         ) {
           return;
