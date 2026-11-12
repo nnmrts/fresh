@@ -312,6 +312,9 @@ document.addEventListener("submit", async (e) => {
         // deno-lint-ignore no-explicit-any
         const qs = new URLSearchParams(new FormData(el, e.submitter) as any);
         qs.forEach((value, key) => partialUrl.searchParams.append(key, value));
+        // Like a browser's GET submit, the address carries the form data
+        // in place of the action's own query.
+        actionUrl.search = qs.toString();
       } else {
         init = { body: new FormData(el, e.submitter), method: lowerMethod };
       }
