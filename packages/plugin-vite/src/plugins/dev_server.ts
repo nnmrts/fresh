@@ -89,6 +89,11 @@ export function devServer(freshConfig: ResolvedFreshViteConfig): Plugin[] {
           try {
             resetSsrModules();
             return await server.ssrLoadModule("fresh:server_entry");
+          } catch (error) {
+            // The module runner keeps a failed evaluation cached until the
+            // next file change, so reset before the next request retries.
+            ssrDirty = true;
+            throw error;
           } finally {
             resolve();
           }
